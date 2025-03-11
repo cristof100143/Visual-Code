@@ -1,15 +1,27 @@
-import pygame, sys, os, math, random
+import sys, math, random
+import os
+import pygame
+
+def resource_path(relative_path):
+    """Get the absolute path to the resource, works for dev and PyInstaller build."""
+    if hasattr(sys, '_MEIPASS'):
+        return os.path.join(sys._MEIPASS, relative_path)  # PyInstaller temp folder
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), relative_path)
+
+# Get the directory of the current script and ensure assets path is correct
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))  # Base directory of Game.py
+ASSETS_DIR = BASE_DIR  # Ensure ASSETS_DIR directly refers to the folder containing assets
 
 pygame.init()
 pygame.mixer.init()
 
 # COLORS
-WHITE = (255,255,255)
-BLACK = (0,0,0)
-GREEN = (0,128,0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+GREEN = (0, 128, 0)
 
 # SCREEN & CLOCK
-SCREEN_WIDTH, SCREEN_HEIGHT = 800,600
+SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 SCREEN = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("Question Blasters by Cristo")
 CLOCK = pygame.time.Clock()
@@ -29,49 +41,67 @@ heart_dropped_this_round = False
 question_type = "Math"
 volume = 0.5
 
+print(f"Base directory: {BASE_DIR}")
+print(f"Assets directory: {ASSETS_DIR}")
+
+# Function to load sounds with error checking
+def load_sound(filename):
+    filepath = resource_path(filename)  # Use resource_path for sound files
+    if not os.path.isfile(filepath):
+        print(f"Sound file not found: {filepath}")
+        raise FileNotFoundError(f"Sound file not found: {filepath}")
+    return pygame.mixer.Sound(filepath)
+
 # --- SOUND SETUP ---
-SND_QUESTION_RIGHT = pygame.mixer.Sound("assets/question.ogg")
-SND_DEAD = pygame.mixer.Sound("assets/dead.ogg")
-SND_MOB_DIE = pygame.mixer.Sound("assets/mobdie.ogg")
-SND_COLLECT_HEART = pygame.mixer.Sound("assets/collectheart.ogg")
-SND_QUESTION_RIGHT.set_volume(0.7)
-SND_DEAD.set_volume(0.7)
-SND_MOB_DIE.set_volume(0.7)
-SND_COLLECT_HEART.set_volume(0.7)
-pygame.mixer.music.load("assets/music.ogg")
-pygame.mixer.music.set_volume(0.3)
-pygame.mixer.music.play(-1)
+try:
+    SND_QUESTION_RIGHT = load_sound("question.ogg")
+    SND_DEAD = load_sound("dead.ogg")
+    SND_MOB_DIE = load_sound("mobdie.ogg")
+    SND_COLLECT_HEART = load_sound("collectheart.ogg")
+
+    SND_QUESTION_RIGHT.set_volume(0.7)
+    SND_DEAD.set_volume(0.7)
+    SND_MOB_DIE.set_volume(0.7)
+    SND_COLLECT_HEART.set_volume(0.7)
+
+    pygame.mixer.music.load(resource_path("music.ogg"))
+    pygame.mixer.music.set_volume(0.3)
+    pygame.mixer.music.play(-1)
+
+except FileNotFoundError as e:
+    print(e)
 
 # --- UTILITY FUNCTIONS ---
 def load_animation_frames(directory, prefix, num_frames, filename_template="{prefix}_{i}.png", scale=1.0):
     frames = []
-    for i in range(1, num_frames+1):
+    for i in range(1, num_frames + 1):
         filename = filename_template.format(prefix=prefix, i=i)
-        filepath = os.path.join(directory, filename)
+        filepath = os.path.join(resource_path(directory), filename)
         if not os.path.isfile(filepath):
             print(f"Error: {filepath} not found.")
             sys.exit()
         img = pygame.image.load(filepath).convert_alpha()
         if scale != 1.0:
             w, h = img.get_size()
-            img = pygame.transform.scale(img, (int(w*scale), int(h*scale)))
+            img = pygame.transform.scale(img, (int(w * scale), int(h * scale)))
         frames.append(img)
     return frames
 
 def load_spritesheet(path, num_frames, scale=1.0):
-    if not os.path.isfile(path):
-        print(f"Error: {path} not found.")
+    filepath = resource_path(path)  # Consistent path handling for spritesheets
+    if not os.path.isfile(filepath):
+        print(f"Error: {filepath} not found.")
         sys.exit()
-    sheet = pygame.image.load(path).convert_alpha()
+    sheet = pygame.image.load(filepath).convert_alpha()
     sheet_width, sheet_height = sheet.get_size()
     frame_width = sheet_width // num_frames
     frames = []
     for i in range(num_frames):
-        rect = pygame.Rect(i*frame_width, 0, frame_width, sheet_height)
+        rect = pygame.Rect(i * frame_width, 0, frame_width, sheet_height)
         frame = sheet.subsurface(rect).copy()
         if scale != 1.0:
-            new_w = int(frame.get_width()*scale)
-            new_h = int(frame.get_height()*scale)
+            new_w = int(frame.get_width() * scale)
+            new_h = int(frame.get_height() * scale)
             frame = pygame.transform.scale(frame, (new_w, new_h))
         frames.append(frame)
     return frames
@@ -86,75 +116,78 @@ def draw_hearts(surface, hp):
     heart_img = ASSETS['heart']
     gap = 5
     for i in range(10):
-        x = 10 + i*(heart_img.get_width()+gap)
+        x = 10 + i * (heart_img.get_width() + gap)
         y = 10
-        if hp >= (i+1)*10:
-            surface.blit(heart_img, (x,y))
+        if hp >= (i + 1) * 10:
+            surface.blit(heart_img, (x, y))
         else:
-            pygame.draw.rect(surface, BLACK, (x,y,heart_img.get_width(), heart_img.get_height()),1)
+            pygame.draw.rect(surface, BLACK, (x, y, heart_img.get_width(), heart_img.get_height()), 1)
 
 def draw_boss_health_bar(boss, index=0, total=1):
     bar_width = 300
     bar_height = 20
-    y_offset = 40 + index*(bar_height+10)
-    x = (SCREEN_WIDTH - bar_width)//2
+    y_offset = 40 + index * (bar_height + 10)
+    x = (SCREEN_WIDTH - bar_width) // 2
     y = SCREEN_HEIGHT - y_offset
-    pygame.draw.rect(SCREEN, BLACK, (x,y,bar_width,bar_height))
+    pygame.draw.rect(SCREEN, BLACK, (x, y, bar_width, bar_height))
     health_percentage = boss.health / boss.initial_health
     fill_width = int(bar_width * health_percentage)
-    pygame.draw.rect(SCREEN, (255,0,0), (x,y,fill_width,bar_height))
-    pygame.draw.rect(SCREEN, WHITE, (x,y,bar_width,bar_height),2)
+    pygame.draw.rect(SCREEN, (255, 0, 0), (x, y, fill_width, bar_height))
+    pygame.draw.rect(SCREEN, WHITE, (x, y, bar_width, bar_height), 2)
 
 def display_fact():
     facts = [
-"GET READY FOR NEXT ROUND"
+        "GET READY FOR NEXT ROUND"
     ]
     fact = random.choice(facts)
     start_time = pygame.time.get_ticks()
-    while pygame.time.get_ticks()-start_time < 3000:
+    while pygame.time.get_ticks() - start_time < 3000:
         SCREEN.fill(WHITE)
         text = ASSETS['font'].render(fact, True, BLACK)
-        SCREEN.blit(text, ((SCREEN_WIDTH-text.get_width())//2, SCREEN_HEIGHT//2))
+        SCREEN.blit(text, ((SCREEN_WIDTH - text.get_width()) // 2, SCREEN_HEIGHT // 2))
         pygame.display.flip()
         CLOCK.tick(60)
 
 # --- ASSET LOADING ---
 def load_assets():
     assets = {}
-    base_dir = os.path.dirname(__file__)
+    base_dir = os.path.dirname(os.path.abspath(__file__))  # Base directory for assets
+
+    # Load player animations
     assets['player_animations'] = {
-        'idle': load_animation_frames(os.path.join(base_dir,'idle'), 'idle', 12),
-        'run': load_animation_frames(os.path.join(base_dir,'run'), 'run', 10),
-        '1_atk': load_animation_frames(os.path.join(base_dir,'1_atk'), '1_atk', 10)
+        'idle': load_animation_frames(os.path.join(base_dir, 'idle'), 'idle', 12),
+        'run': load_animation_frames(os.path.join(base_dir, 'run'), 'run', 10),
+        '1_atk': load_animation_frames(os.path.join(base_dir, '1_atk'), '1_atk', 10)
     }
-    bg1 = os.path.join(base_dir, 'background.PNG')
-    if not os.path.isfile(bg1):
-        print("Error: background.PNG not found.")
-        sys.exit()
-    assets['level1_bg'] = pygame.image.load(bg1).convert()
-    bg2 = os.path.join(base_dir, 'level2bg.png')
-    assets['level2_bg'] = pygame.image.load(bg2).convert() if os.path.isfile(bg2) else assets['level1_bg']
-    bg3 = os.path.join(base_dir, 'level3bg.png')
-    assets['level3_bg'] = pygame.image.load(bg3).convert() if os.path.isfile(bg3) else assets['level1_bg']
+
+    # Load soldier animations from spritesheets
     assets['soldier_animations'] = {
-        'idle': load_spritesheet(os.path.join(base_dir, 'Soldier-Idle.png'), 6, scale=2.0),
-        'walk': load_spritesheet(os.path.join(base_dir, 'Soldier-Walk.png'), 8, scale=2.0)
+        'idle': load_spritesheet(os.path.join(base_dir, 'Soldier-Idle.png'), 6, scale=1.0),
+        'walk': load_spritesheet(os.path.join(base_dir, 'Soldier-Walk.png'), 8, scale=1.0)
     }
+
+    # Load orc animations from spritesheets
     assets['orc_animations'] = {
-        'idle': load_spritesheet(os.path.join(base_dir, 'Orc-Idle.png'), 6, scale=2.0),
-        'walk': load_spritesheet(os.path.join(base_dir, 'Orc-Walk.png'), 8, scale=2.0)
+        'idle': load_spritesheet(os.path.join(base_dir, 'Orc-Idle.png'), 6, scale=1.0),
+        'walk': load_spritesheet(os.path.join(base_dir, 'Orc-Walk.png'), 8, scale=1.0)
     }
-    heart_path = os.path.join(base_dir, 'heart.png')
-    if os.path.isfile(heart_path):
-        assets['heart'] = pygame.image.load(heart_path).convert_alpha()
-    else:
-        print("Error: heart.png not found.")
-        sys.exit()
+
+    # Load background images
+    assets['level1_bg'] = pygame.image.load(os.path.join(base_dir, 'level1bg.png')).convert()
+    assets['level2_bg'] = pygame.image.load(os.path.join(base_dir, 'level2bg.png')).convert()
+    assets['level3_bg'] = pygame.image.load(os.path.join(base_dir, 'level3bg.png')).convert()
+
+    # Load other assets
+    assets['background'] = pygame.image.load(os.path.join(base_dir, 'background.png')).convert()
+    assets['heart'] = pygame.image.load(os.path.join(base_dir, 'heart.png')).convert_alpha()
+
+    # Load font
     font_path = os.path.join(base_dir, 'boxy-bold.ttf')
     if os.path.isfile(font_path):
         assets['font'] = pygame.font.Font(font_path, 16)
     else:
         assets['font'] = pygame.font.SysFont("Arial", 16)
+
     return assets
 
 ASSETS = load_assets()
@@ -436,33 +469,43 @@ class Enemy(pygame.sprite.Sprite):
         self.enemy_type = enemy_type
         self.variant = variant
         self.position = pygame.Vector2(pos)
+
+        # Base attributes for enemy type
         if enemy_type == "soldier":
-            base_speed = random.uniform(120,160)*0.7
+            base_speed = random.uniform(120, 160) * 0.7
             base_health = 50
-            base_scale = 1.0
-        else:
-            base_speed = random.uniform(60,80)*0.9
+            base_scale = 2.0  # Increased base scale for better visibility
+        else:  # Orc
+            base_speed = random.uniform(60, 80) * 0.9
             base_health = 80
-            base_scale = 1.0
+            base_scale = 2.5  # Slightly larger orcs
+
+        # Adjust attributes based on variant
         if variant == "small":
-            self.scale = 0.8
-            self.health = int(base_health*0.4)
-            self.speed = base_speed*1.3
-        else:
+            self.scale = base_scale * 0.8  # 80% of the base size
+            self.health = int(base_health * 0.6)  # Reduced health for small variant
+            self.speed = base_speed * 1.3  # Increased speed for small variant
+        else:  # Default to "medium" size
             self.scale = base_scale
             self.health = base_health
             self.speed = base_speed
+
+        # Load animations based on enemy type
         if enemy_type == "soldier":
             base_anim = ASSETS['soldier_animations']
         else:
             base_anim = ASSETS['orc_animations']
+
+        # Scale animations based on calculated scale factor
         self.animations = {
-            'idle': [pygame.transform.scale(frame, (int(frame.get_width()*self.scale), int(frame.get_height()*self.scale))) for frame in base_anim['idle']],
-            'walk': [pygame.transform.scale(frame, (int(frame.get_width()*self.scale), int(frame.get_height()*self.scale))) for frame in base_anim['walk']]
+            'idle': [pygame.transform.scale(frame, (int(frame.get_width() * self.scale), int(frame.get_height() * self.scale))) for frame in base_anim['idle']],
+            'walk': [pygame.transform.scale(frame, (int(frame.get_width() * self.scale), int(frame.get_height() * self.scale))) for frame in base_anim['walk']]
         }
+
+        # Set initial state and animation
         self.state = "walk"
         self.frame_index = 0
-        self.animation_speed = 0.2
+        self.animation_speed = 0.2  # Adjust animation speed as needed
         self.current_frames = self.animations[self.state]
         self.image = self.current_frames[int(self.frame_index)]
         self.rect = self.image.get_rect(center=pos)
@@ -471,20 +514,26 @@ class Enemy(pygame.sprite.Sprite):
         self.shot_cooldown = 0
 
     def update(self, dt, *args):
+        # Move towards the player
         if player and not player.is_dead:
             direction = pygame.Vector2(player.rect.center) - self.position
             if direction.length() > 0:
                 direction = direction.normalize()
-                self.position += direction * self.speed * (dt/1000)
+                self.position += direction * self.speed * (dt / 1000)
 
+                # Ensure the enemy stays within screen bounds
                 self.position.x = max(0, min(self.position.x, SCREEN_WIDTH))
                 self.position.y = max(0, min(self.position.y, SCREEN_HEIGHT))
                 self.rect.center = self.position
+
+        # Update animation
         self.current_frames = self.animations[self.state]
         self.frame_index += self.animation_speed * dt
         if self.frame_index >= len(self.current_frames):
             self.frame_index = 0
         self.image = self.current_frames[int(self.frame_index)]
+
+        # Update position and collision mask
         old_center = self.rect.center
         self.rect = self.image.get_rect()
         self.rect.center = old_center
@@ -492,9 +541,11 @@ class Enemy(pygame.sprite.Sprite):
 
     def take_damage(self, dmg):
         self.health -= dmg
-        if self.health < 0:
+        if self.health <= 0:
             self.health = 0
             SND_MOB_DIE.play()
+            self.kill()
+
 
 # --- PROJECTILE CLASS (Player's bullet) ---
 class Projectile(pygame.sprite.Sprite):
@@ -536,27 +587,35 @@ class EnemyProjectile(pygame.sprite.Sprite):
 class FireballProjectile(pygame.sprite.Sprite):
     def __init__(self, pos, direction):
         super().__init__()
-        self.image = pygame.image.load("assets/fireball.png").convert_alpha()
-        self.image = pygame.transform.scale(self.image, (50,50))
-        self.rect = self.image.get_rect(center=pos)
-        self.velocity = direction * 150
+        # Load the fireball image using resource_path
+        self.image = pygame.image.load(resource_path("fireball.png")).convert_alpha()
+        self.image = pygame.transform.scale(self.image, (50, 50))  # Scale fireball to 50x50
         angle = math.degrees(math.atan2(-direction.y, direction.x))
-        self.image = pygame.transform.rotate(self.image, angle)
+        self.image = pygame.transform.rotate(self.image, angle)  # Rotate fireball based on direction
         self.rect = self.image.get_rect(center=pos)
+
+        # Set velocity and damage
+        self.velocity = direction * 150  # Fireball speed (adjust as needed)
         self.damage = 40
+
     def update(self, dt, *args):
-        movement = self.velocity * (dt/1000)
+        # Update fireball position based on velocity and delta time
+        movement = self.velocity * (dt / 1000)  # Scale movement to time elapsed
         self.rect.centerx += movement.x
         self.rect.centery += movement.y
+
+        # Remove fireball if it moves outside the screen boundaries
         if not SCREEN.get_rect().colliderect(self.rect):
             self.kill()
+
 
 # --- FINAL BOSS CLASS ---
 class FinalBoss(pygame.sprite.Sprite):
     def __init__(self, pos):
         super().__init__()
-        self.image = pygame.image.load("assets/idleboss.png").convert_alpha()
-        self.image = pygame.transform.scale(self.image, (500,500))
+        self.image = pygame.image.load(resource_path("idleboss.png")).convert_alpha()
+        print(resource_path("idleboss.png"))
+        self.image = pygame.transform.scale(self.image, (500, 500))
         self.rect = self.image.get_rect(center=pos)
         self.mask = pygame.mask.from_surface(self.image)
         self.position = pygame.Vector2(pos)
@@ -564,9 +623,10 @@ class FinalBoss(pygame.sprite.Sprite):
         self.initial_health = self.health
         self.speed = 20
         self.fireball_timer = 4000
-        self.hit_count = 2 
-        self.questions_asked_count = 6 
-        self.last_hit_time = 20  
+        self.hit_count = 2
+        self.questions_asked_count = 6
+        self.last_hit_time = 20
+        
     def update(self, dt, *args):
         if player and not player.is_dead:
             direction = pygame.Vector2(player.rect.center) - self.position
@@ -761,6 +821,7 @@ def main_menu():
                             elif chosen == "Options":
                                 state = "options"
                             elif chosen == "Quit":
+                                input("Press Enter to exit...")
                                 pygame.quit(); sys.exit()
                         elif state == "qtype":
                             question_type = options_qtype[selection]
